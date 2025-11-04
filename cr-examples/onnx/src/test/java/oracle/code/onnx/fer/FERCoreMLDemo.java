@@ -43,6 +43,7 @@ import java.util.logging.Logger;
 import java.util.stream.IntStream;
 
 import oracle.code.onnx.OnnxProvider;
+import oracle.code.onnx.OnnxRuntime;
 
 public class FERCoreMLDemo {
 
@@ -189,7 +190,8 @@ public class FERCoreMLDemo {
 
     private void analyzeSelection(JProgressBar progressBar, JButton analyzeBtn) {
 		progressBar.setValue(0);
-		progressBar.setMaximum(selectedUrls.size());
+		int size = selectedUrls.size();
+		progressBar.setMaximum(size);
 		progressBar.setVisible(true);
 		analyzeBtn.setEnabled(false);
 
@@ -199,15 +201,27 @@ public class FERCoreMLDemo {
                 "ModelCacheDirectory", FERCoreMLDemo.class.getResource(BASE_PATH).getPath());
         OnnxProvider provider = new OnnxProvider("CoreML", options);
 
-        long startTime = System.nanoTime();
+		long initStartTime = System.nanoTime();
+		long initTime = 0;
+		long totalInferenceTime = 0;
 
         try (var arena = Arena.ofConfined()) {
-            for (int i = 0; i < selectedUrls.size(); i++) {
+			OnnxRuntime.SessionOptions sessionOptions = inference.prepareSessionOptions(arena, provider);
+
+			long initEndTime = System.nanoTime();
+			initTime = (initEndTime - initStartTime) / 1000000;
+
+			for (int i = 0; i < size; i++) {
                 URL url = selectedUrls.get(i);
                 String result = "<html>%s</html>";
                 try {
-                    float[] probs = inference.analyzeImage(arena, provider, url, useCondensedModel);
-                    String top3 = formatTopK(probs);
+					long inferenceStart = System.nanoTime();
+					float[] probs = inference.analyzeImage(arena, sessionOptions, url, useCondensedModel);
+					long inferenceEnd = System.nanoTime();
+					long inferenceTime = (inferenceEnd - inferenceStart) / 1000000;
+					totalInferenceTime += inferenceTime;
+					logger.info("Finished inference for image %d in %d ms".formatted(i + 1, inferenceTime));
+					String top3 = formatTopK(probs);
                     resultLabels[i].setText(result.formatted(top3 ));
                     frame.repaint();
                 } catch (Exception ex) {
@@ -215,14 +229,14 @@ public class FERCoreMLDemo {
                     resultLabels[i].setText(result.formatted(result.formatted(RED_ERROR_SPAN)));
                 }
                 progressBar.setValue(i + 1);
-                progressBar.setString("Processed " + (i + 1) + "/" + selectedUrls.size());
+                progressBar.setString("Processed " + (i + 1) + "/" + size);
             }
         } catch (Exception initEx) {
             logger.log(Level.SEVERE, "Failed to initialize inference resources", initEx);
         } finally {
-            long endTime = System.nanoTime();
-            logger.info("Total time spent in evaluation %s ms".formatted((endTime - startTime) / 1000000));
-            analyzeBtn.setEnabled(true);
+			logger.info("Total time initializing ORT: %d ms".formatted(initTime));
+			logger.info("Total inference time: %d ms for %d images".formatted(totalInferenceTime, size));
+			analyzeBtn.setEnabled(true);
             analyzeBtn.setText("Restart");
             progressBar.setString("Analysis complete!");
             logger.info("=== FER analysis complete ===");
