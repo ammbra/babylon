@@ -122,8 +122,8 @@ public class FERCoreMLDemo {
             }
         });
 
-        JPanel southPanel = new JPanel(new BorderLayout());
-        southPanel.add(analyzeBtn, BorderLayout.CENTER);
+        JPanel southPanel = new JPanel();
+        southPanel.add(analyzeBtn);
 
         frame.add(thumbPanel, BorderLayout.NORTH);
         frame.add(bigPanel, BorderLayout.CENTER);
